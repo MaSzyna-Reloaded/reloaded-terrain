@@ -8,13 +8,19 @@ extends Node
 ## sector it unloads taken out. The Terrain3D's window of regions (Terrain3DData.region_map_origin)
 ## follows the streaming camera (SceneryStreamingServer), so a world may be of any size - which the
 ## patched Terrain3D of reloaded-terrain allows (patches/terrain3d-region-window.patch). The game's
-## world (SceneryWorldPck) and the importer's test scene (SISceneryTest) stream by it, taken with
-## that Terrain3D from reloaded-terrain's release (reloaded-terrain.zip).
+## world (SceneryWorldPck), the importer's test scene (SISceneryTest) and scenery editor
+## (SISceneryEditor) stream by it, taken with that Terrain3D from reloaded-terrain's release
+## (reloaded-terrain.zip).
 ## The regions are read on a thread of the streamer's own, not in a WorkerThreadPool task:
 ## ResourceLoader.load() in a task returned null for one region of Stary Sącz every time while
 ## flying over it, the same file read at once on the main thread or a thread of its own
 ## (2026-10-15, FINDINGS.md). A region whose file cannot be read is reported once and not read
-## again while its sector stays loaded.
+## again while its sector stays loaded. A region comes in as it was read (not modified): what an
+## editor changes of it is its own to save, when the region is about to go (region_unloading).
+
+## The region [param region] is about to be taken out of the Terrain3D, as the camera has left its
+## sector - what was changed of it is saved now or lost. Not when the streaming closes (close()).
+signal region_unloading(region: Terrain3DRegion)
 
 @export var terrain: Terrain3D
 
@@ -108,6 +114,7 @@ func stream() -> void:
             if outside.call(location, origin) and not location in leaving:
                 leaving.append(location)
     for location: Vector2i in leaving:
+        region_unloading.emit(data.get_region(location))
         data.unload_region(location, false)
     if leaving:
         data.update_maps()
@@ -160,5 +167,7 @@ func _put_regions(regions: Array[Terrain3DRegion], unreadable: Array[Vector2i]) 
     for region: Terrain3DRegion in regions:
         if _wanted.has(region.location):
             terrain.data.add_region(region, false)
+            # as read: modified only by what edits it
+            region.set_modified(false)
     terrain.data.update_maps()
     stream()
