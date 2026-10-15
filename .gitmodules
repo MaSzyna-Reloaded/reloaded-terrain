@@ -1,0 +1,3 @@
+[submodule "vendor/terrain3d"]
+	path = vendor/terrain3d
+	url = https://github.com/TokisanGames/Terrain3D.git
