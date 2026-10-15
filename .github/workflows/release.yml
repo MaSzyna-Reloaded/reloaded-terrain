@@ -1,10 +1,12 @@
 name: release
 
-# reloaded-terrain.zip - addons/terrain_3d (Terrain3D patched, built double precision for Linux and
-# Windows) and addons/reloaded_terrain (WorldTerrainStreamer) - built and published: main's newest as
-# the one prerelease MAIN_RELEASE, replaced on every push to main; a pushed tag (YYMMDDHHMM) as a
-# release of its own, named by the tag, the latest. Terrain3D's libraries are built again only when
-# its sources, the patches or the godot-cpp they are built against change (cached); the double
+# reloaded-terrain-<release>.zip - addons/terrain_3d (Terrain3D patched, built double precision for
+# Linux and Windows) and addons/reloaded_terrain (WorldTerrainStreamer) - built and published: main's
+# newest as the one prerelease MAIN_RELEASE (reloaded-terrain-latest.zip), replaced on every push to
+# main; a pushed tag YYMMDDHHMM as a release of its own, named by the tag, the latest
+# (reloaded-terrain-YYMMDDHHMM.zip). The Linux libraries are built in libmaszyna's Linux SDK image
+# (glibc 2.34, LINUX_SDK_IMAGE), as libmaszyna's. Terrain3D's libraries are built again only when its
+# sources, the patches, the image or the godot-cpp they are built against change (cached); the double
 # precision Godot dumping the API is libmaszyna's release godot-<version>-double.
 on:
   push:
@@ -13,11 +15,11 @@ on:
     tags:
       - '**'
       # made by the CI itself (a tag it makes starts no workflow anyway)
-      - '!reloaded-terrain-main'
+      - '!reloaded-terrain-latest'
   workflow_dispatch:
 
 env:
-  MAIN_RELEASE: reloaded-terrain-main
+  MAIN_RELEASE: reloaded-terrain-latest
 
 permissions:
   contents: write
@@ -34,7 +36,7 @@ jobs:
       - name: Terrain3D's sources
         id: sources
         run: |
-          echo "key=terrain3d-$(git rev-parse HEAD:vendor/terrain3d)-$(sed -n 's/^GODOT_CPP_COMMIT:=//p' Makefile)-${{ hashFiles('patches/*.patch') }}" >> "$GITHUB_OUTPUT"
+          echo "key=terrain3d-$(git rev-parse HEAD:vendor/terrain3d)-$(sed -n 's/^GODOT_CPP_COMMIT:=//p' Makefile)-$(sed -n 's/^LINUX_SDK_IMAGE:=.*://p' Makefile)-${{ hashFiles('patches/*.patch') }}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache@v4
         id: cache
@@ -51,6 +53,7 @@ jobs:
           chmod +x "$HOME/.local/bin/godot-double"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      # scons for the Windows build: the Linux one runs in libmaszyna's Linux SDK image, which has its own
       - name: Install scons and MinGW
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
@@ -72,7 +75,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/reloaded-terrain.zip --verify-tag --title "$GITHUB_REF_NAME" --latest \
+          cp dist/reloaded-terrain.zip "dist/reloaded-terrain-$GITHUB_REF_NAME.zip"
+          gh release create "$GITHUB_REF_NAME" "dist/reloaded-terrain-$GITHUB_REF_NAME.zip" --verify-tag --title "$GITHUB_REF_NAME" --latest \
             --notes "addons/terrain_3d and addons/reloaded_terrain of $GITHUB_REF_NAME: unzip into a project."
 
       - name: Publish main's release
@@ -81,5 +85,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete "$MAIN_RELEASE" --cleanup-tag --yes || true
-          gh release create "$MAIN_RELEASE" dist/reloaded-terrain.zip --target "$GITHUB_SHA" --prerelease \
+          cp dist/reloaded-terrain.zip "dist/$MAIN_RELEASE.zip"
+          gh release create "$MAIN_RELEASE" "dist/$MAIN_RELEASE.zip" --target "$GITHUB_SHA" --prerelease \
             --title "$MAIN_RELEASE" --notes "addons/terrain_3d and addons/reloaded_terrain of main at ${GITHUB_SHA::7}: unzip into a project."
